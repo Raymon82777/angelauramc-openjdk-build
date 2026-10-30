@@ -1,0 +1,55 @@
+name: Build Java 25 for iOS (GitHub-hosted)
+
+# build.yml's iOS job needs the self-hosted J316sAP runner, which forks can't
+# use. This runs the same build scripts on a GitHub-hosted Apple silicon Mac.
+
+on:
+  push:
+    branches: [ci/hosted-ios-jre25]
+  workflow_dispatch:
+
+jobs:
+  build_ios:
+    name: "Build Java 25 for iOS aarch64"
+    runs-on: macos-26
+    timeout-minutes: 360
+    env:
+      BUILD_IOS: 1
+      TARGET_VERSION: 25
+      HOMEBREW_NO_AUTO_UPDATE: 1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up boot JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      # 6_buildjdk.sh finds the boot JDK with /usr/libexec/java_home
+      - name: Register boot JDK with java_home
+        run: |
+          sudo mkdir -p /Library/Java/JavaVirtualMachines
+          sudo ln -sfn "$(dirname "$(dirname "$JAVA_HOME")")" /Library/Java/JavaVirtualMachines/ci-temurin-25.jdk
+          /usr/libexec/java_home -v 25
+
+      - name: Install wget
+        run: brew install wget
+
+      - name: Build with CI build script
+        run: bash 1_ci_build_arch_aarch64.sh
+
+      - name: Upload JRE build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: "jre25-ios-aarch64"
+          path: jre25-ios*.tar.xz
+
+      - name: Upload configure log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: "config-log"
+          path: openjdk-25/config.log
+          if-no-files-found: ignore
